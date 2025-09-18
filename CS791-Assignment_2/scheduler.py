@@ -30,8 +30,8 @@ class NoiseSchedulerDDPM():
 
         self.betas = torch.linspace(beta_start, beta_end, self.num_timesteps, dtype=torch.float32)
 
-        self.alphas = None
-
+        self.alphas = torch.cumprod(1 - self.betas, dim=0)
+        
     def __len__(self):
         return self.num_timesteps
     
