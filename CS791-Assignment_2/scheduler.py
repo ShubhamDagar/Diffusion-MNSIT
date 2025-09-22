@@ -1,4 +1,5 @@
 import torch
+import math
 
 class NoiseSchedulerDDPM():
     """
@@ -19,6 +20,8 @@ class NoiseSchedulerDDPM():
 
         if type == "linear":
             self.init_linear_schedule(**kwargs)
+        elif type == "cosine":
+            self.init_cosine_schedule(**kwargs)
         else:
             raise NotImplementedError(f"{type} scheduler is not implemented") # change this if you implement additional schedulers
 
@@ -31,6 +34,30 @@ class NoiseSchedulerDDPM():
         self.betas = torch.linspace(beta_start, beta_end, self.num_timesteps, dtype=torch.float32)
 
         self.alphas = torch.cumprod(1 - self.betas, dim=0)
+    
+    def init_cosine_schedule(self, beta_start, beta_end):
+        """
+        Precompute whatever quantities are required for training and sampling
+        """
+
+        # taken from https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf 
+
+        self.betas = torch.zeros(self.num_timesteps, dtype=torch.float32)
+
+        self.alphas = torch.zeros(self.num_timesteps, dtype=torch.float32)
+        s = 0.008 # mentioned in the paper...
+
+        for t in range(self.num_timesteps):
+            arg_t = ( ((t / self.num_timesteps) + s) / (1 + s) ) * math.pi / 2
+            arg_0 = ( (s) / (1 + s) ) * math.pi / 2
+            f_t = math.cos(arg_t) ** 2
+            f_0 = math.cos(arg_0) ** 2
+            self.alphas[t] = f_t / f_0
+        
+        self.betas[0] = 1 - self.alphas[0]
+        for t in range(1, self.num_timesteps):
+            self.betas[t] = 1 - self.alphas[t] / self.alphas[t-1]
+    
         
     def __len__(self):
         return self.num_timesteps

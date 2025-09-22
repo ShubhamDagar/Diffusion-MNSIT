@@ -13,8 +13,8 @@ import csv
 
 # Add any extra imports you want here
 
-def train(model, train_loader, test_loader, run_name, learning_rate, epochs, batch_size, device, num_steps):
-    scheduler = NoiseSchedulerDDPM(num_steps, type="linear", beta_start=0.0001, beta_end=0.02)
+def train(model, train_loader, test_loader, run_name, learning_rate, epochs, batch_size, device, num_steps, masking_schedule="linear"):
+    scheduler = NoiseSchedulerDDPM(num_steps, type=masking_schedule, beta_start=0.0001, beta_end=0.02)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     log_file = os.path.join(run_name, "train_log.csv")
@@ -61,24 +61,25 @@ def train(model, train_loader, test_loader, run_name, learning_rate, epochs, bat
     print(f"Training finished!!!")
 
 
-def sample(model, device, num_samples=16, num_steps=50):
+def sample(model, device, num_samples=16, num_steps=50, masking_schedule="linear"):
     '''
     Returns:
         torch.Tensor, shape (num_samples, 1, 28, 28)
     '''
-    scheduler = NoiseSchedulerDDPM(num_steps, type="linear", beta_start=0.0001, beta_end=0.02)
+    scheduler = NoiseSchedulerDDPM(num_steps, type=masking_schedule, beta_start=0.0001, beta_end=0.02)
     x_curr = torch.randn(num_samples, 1, 28, 28, device=device)
 
-    for t in reversed(range(num_steps)):
-        if t > 0:
-            z = torch.randn_like(x_curr)
-        else:
-            z = 0
-        alpha_t = scheduler.alphas.to(device)[t].view(-1, 1, 1, 1)
-        beta_t = scheduler.betas.to(device)[t].view(-1, 1, 1, 1)
-        
-        t_batch = torch.full((num_samples,), t, device=device, dtype=torch.long)
-        x_curr = 1/(1-beta_t).sqrt() * (x_curr - (beta_t/(1-alpha_t).sqrt()) * model(x_curr, t_batch)) + z * beta_t.sqrt()
+    with torch.no_grad():
+        for t in reversed(range(num_steps)):
+            if t > 0:
+                z = torch.randn_like(x_curr)
+            else:
+                z = 0
+            alpha_t = scheduler.alphas.to(device)[t].view(-1, 1, 1, 1)
+            beta_t = scheduler.betas.to(device)[t].view(-1, 1, 1, 1)
+            
+            t_batch = torch.full((num_samples,), t, device=device, dtype=torch.long)
+            x_curr = 1/(1-beta_t).sqrt() * (x_curr - (beta_t/(1-alpha_t).sqrt()) * model(x_curr, t_batch)) + z * beta_t.sqrt()
     
     print("Samples generated!!!")
     return x_curr
@@ -92,6 +93,7 @@ def parse_args():
     parser.add_argument("--num_samples", type=int, default=16, help="Number of samples to generate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--mode", type=str, default="train", choices=["train", "sample"], help="Mode: train or sample")
+    parser.add_argument("--masking_schedule", type=str, default="linear", choices=["linear", "cosine"], help="Masking Schedule: linear or cosine")
     # Add any other arguments you want here
     return parser.parse_args()
 
@@ -113,17 +115,17 @@ if __name__ == "__main__":
 
     sample_img, _ = train_dataset[0]
     in_channel = sample_img.shape[0]
-    model = DDPM(in_channel=in_channel, out_channel=in_channel, num_classes=10)
+    model = DDPM(in_channel=in_channel, out_channel=in_channel)
     model.to(device)
 
-    run_name = f"exps_ddpm/{args.epochs}ep_{args.batch_size}bs_{args.learning_rate}lr_{args.num_steps}num_steps" # Change run name based on your experiments
+    run_name = f"exps_ddpm/final/ddpm_{args.epochs}ep_{args.batch_size}bs_{args.learning_rate}lr_{args.num_steps}num_steps_{args.masking_schedule}_masking_schedule" # Change run name based on your experiments
     os.makedirs(run_name, exist_ok=True)
 
     if args.mode == "train":
         model.train()
-        train(model, train_loader, test_loader, run_name, args.learning_rate, args.epochs, args.batch_size, device, args.num_steps)
+        train(model, train_loader, test_loader, run_name, args.learning_rate, args.epochs, args.batch_size, device, args.num_steps, args.masking_schedule)
     elif args.mode == "sample":
         model.load_state_dict(torch.load(f"{run_name}/model_final.pth"))
         model.eval()
-        samples = sample(model, device, args.num_samples, args.num_steps)
+        samples = sample(model, device, args.num_samples, args.num_steps, args.masking_schedule)
         torch.save(samples, f"{run_name}/{args.num_samples}samples_{args.num_steps}steps.pt")
