@@ -42,21 +42,22 @@ class NoiseSchedulerDDPM():
 
         # taken from https://proceedings.mlr.press/v139/nichol21a/nichol21a.pdf 
 
-        self.betas = torch.zeros(self.num_timesteps, dtype=torch.float32)
+        s = 0.008
+        T = self.num_timesteps
 
-        self.alphas = torch.zeros(self.num_timesteps, dtype=torch.float32)
-        s = 0.008 # mentioned in the paper...
-
-        for t in range(self.num_timesteps):
-            arg_t = ( ((t / self.num_timesteps) + s) / (1 + s) ) * math.pi / 2
-            arg_0 = ( (s) / (1 + s) ) * math.pi / 2
+        self.alphas = torch.zeros(T, dtype=torch.float32)
+        for t in range(T):
+            arg_t = (((t / (T - 1)) + s) / (1 + s)) * math.pi / 2   # FIX: T-1
+            arg_0 = (s / (1 + s)) * math.pi / 2
             f_t = math.cos(arg_t) ** 2
             f_0 = math.cos(arg_0) ** 2
             self.alphas[t] = f_t / f_0
-        
-        self.betas[0] = 1 - self.alphas[0]
-        for t in range(1, self.num_timesteps):
-            self.betas[t] = 1 - self.alphas[t] / self.alphas[t-1]
+
+        # Compute betas safely
+        self.betas = torch.zeros(T, dtype=torch.float32)
+        self.betas[0] = min(1 - self.alphas[0], 0.999)
+        for t in range(1, T):
+            self.betas[t] = min(1 - self.alphas[t] / self.alphas[t-1], 0.999)
     
         
     def __len__(self):

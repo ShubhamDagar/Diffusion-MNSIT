@@ -80,7 +80,7 @@ def sample(model, class_label, device, num_samples=16, num_steps=1000, masking_s
             beta_t = scheduler.betas.to(device)[t].view(-1, 1, 1, 1)
             
             t_batch = torch.full((num_samples,), t, device=device, dtype=torch.long)
-            class_label_batch = torch.full((num_samples,), class_num, device=device, dtype=torch.long)
+            class_label_batch = torch.full((num_samples,), class_label, device=device, dtype=torch.long)
             x_curr = 1/(1-beta_t).sqrt() * (x_curr - (beta_t/(1-alpha_t).sqrt()) * model(x_curr, t_batch, class_label_batch)) + z * beta_t.sqrt()
     
     print("Samples generated!!!")

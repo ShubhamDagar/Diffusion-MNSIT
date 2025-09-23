@@ -61,7 +61,7 @@ def train(model, train_loader, test_loader, run_name, learning_rate, epochs, bat
     print(f"Training finished!!!")
 
 
-def sample(model, device, num_samples=16, num_steps=50, masking_schedule="linear"):
+def sample(model, device, num_samples, num_steps, masking_schedule):
     '''
     Returns:
         torch.Tensor, shape (num_samples, 1, 28, 28)
